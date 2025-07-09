@@ -78,41 +78,6 @@ def start(message):
     if len(args) > 1:
         deep_link_id = args[1]
         user_states[int(user_id)] = {'deep_link': deep_link_id}  # vaqtincha saqlaymiz
-
-    # Majburiy obuna tekshirish
-    if os.path.exists('channels.json'):
-        with open('channels.json', 'r', encoding='utf-8') as f:
-            try:
-                channels = json.load(f)
-            except json.JSONDecodeError:
-                channels = []
-    else:
-        channels = []
-
-    not_subscribed = []
-    for ch in channels:
-        try:
-            chat_member = bot.get_chat_member(ch['link'], int(user_id))
-            if chat_member.status not in ['creator', 'administrator', 'member']:
-                not_subscribed.append(ch)
-        except Exception:
-            not_subscribed.append(ch)
-
-    if not_subscribed:
-        markup = types.InlineKeyboardMarkup(row_width=1)
-        for ch in not_subscribed:
-            markup.add(types.InlineKeyboardButton(f"✅ {ch['title']}", url=f"https://t.me/{ch['link'].replace('@','')}"))
-        markup.add(types.InlineKeyboardButton("♻️ Tekshirish", callback_data="check_subs"))
-
-        bot.send_message(
-            message.chat.id,
-            "❗ Botdan foydalanish uchun quyidagi kanallarga obuna bo‘ling:",
-            reply_markup=markup
-        )
-        return
-
-    # Obuna bo‘lsa
-    if len(args) > 1:
         show_deep_link_data(message.chat.id, deep_link_id)
     else:
         send_main_menu(message.chat.id)
