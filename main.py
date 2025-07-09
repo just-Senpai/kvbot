@@ -13,7 +13,7 @@ def send_main_menu(chat_id):
         InlineKeyboardButton("🏠 Uy-joy izlash", callback_data='menu_uy'),
         InlineKeyboardButton("👫 Do‘stlarni taklif qilish", callback_data='menu_dost'),
         InlineKeyboardButton("📞 Reklama uchun admin", url='https://t.me/Abu200115'),
-        InlineKeyboardButton("🎥 Video qo‘llanma", url='https://t.me/Yakhyojonov/614')
+        InlineKeyboardButton("🎥 Video qo‘llanma", url='https://t.me/+LZNXTqqbPSg3Yzdi')
     )
     bot.send_message(
         chat_id,
@@ -21,16 +21,25 @@ def send_main_menu(chat_id):
         reply_markup=markup
     )
 
-import json
-import os
+
+
+
+
+
+
+user_states = {}  # user_id: {'deep_link': id} kabi vaqtinchalik ma'lumot saqlash
 
 @bot.message_handler(commands=['start'])
 def start(message):
+    import json, os
+    from telebot import types
+
     user_id = str(message.from_user.id)
     first_name = message.from_user.first_name or ""
     last_name = message.from_user.last_name or ""
+    username = message.from_user.username or None
 
-    # Fayl mavjud emas bo‘lsa, bosh dict ochamiz
+    # users.json ni o‘qiymiz yoki yaratamiz
     if not os.path.exists('users.json'):
         users = {}
     else:
@@ -40,21 +49,161 @@ def start(message):
             except json.JSONDecodeError:
                 users = {}
 
-    # Agar user yo‘q bo‘lsa, qo‘shamiz
+    # Userni qo‘shamiz yoki yangilaymiz
     if user_id not in users:
         users[user_id] = {
             'id': user_id,
             'name': first_name,
             'last': last_name,
-            'num': None
+            'username': username,
+            'num': None,
+            'chances': 3
         }
+    else:
+        user = users[user_id]
+        user['name'] = first_name
+        user['last'] = last_name
+        user['username'] = username
+        if 'chances' not in user:
+            user['chances'] = 3
+        if 'num' not in user:
+            user['num'] = None
+        users[user_id] = user
 
-        with open('users.json', 'w', encoding='utf-8') as f:
-            json.dump(users, f, ensure_ascii=False, indent=4)
+    with open('users.json', 'w', encoding='utf-8') as f:
+        json.dump(users, f, ensure_ascii=False, indent=4)
 
-    # Keyin menyuni yuboramiz
-    send_main_menu(message.chat.id)
+    # Argument bormi? (deep link)
+    args = message.text.strip().split()
+    if len(args) > 1:
+        deep_link_id = args[1]
+        user_states[int(user_id)] = {'deep_link': deep_link_id}  # vaqtincha saqlaymiz
 
+    # Majburiy obuna tekshirish
+    if os.path.exists('channels.json'):
+        with open('channels.json', 'r', encoding='utf-8') as f:
+            try:
+                channels = json.load(f)
+            except json.JSONDecodeError:
+                channels = []
+    else:
+        channels = []
+
+    not_subscribed = []
+    for ch in channels:
+        try:
+            chat_member = bot.get_chat_member(ch['link'], int(user_id))
+            if chat_member.status not in ['creator', 'administrator', 'member']:
+                not_subscribed.append(ch)
+        except Exception:
+            not_subscribed.append(ch)
+
+    if not_subscribed:
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        for ch in not_subscribed:
+            markup.add(types.InlineKeyboardButton(f"✅ {ch['title']}", url=f"https://t.me/{ch['link'].replace('@','')}"))
+        markup.add(types.InlineKeyboardButton("♻️ Tekshirish", callback_data="check_subs"))
+
+        bot.send_message(
+            message.chat.id,
+            "❗ Botdan foydalanish uchun quyidagi kanallarga obuna bo‘ling:",
+            reply_markup=markup
+        )
+        return
+
+    # Obuna bo‘lsa
+    if len(args) > 1:
+        show_deep_link_data(message.chat.id, deep_link_id)
+    else:
+        send_main_menu(message.chat.id)
+
+
+# ✅ Tekshirish callback
+@bot.callback_query_handler(func=lambda call: call.data == 'check_subs')
+def check_subscriptions(call):
+    from telebot import types
+    user_id = call.from_user.id
+
+    # Yana tekshiramiz
+    if os.path.exists('channels.json'):
+        with open('channels.json', 'r', encoding='utf-8') as f:
+            try:
+                channels = json.load(f)
+            except json.JSONDecodeError:
+                channels = []
+    else:
+        channels = []
+
+    not_subscribed = []
+    for ch in channels:
+        try:
+            chat_member = bot.get_chat_member(ch['link'], user_id)
+            if chat_member.status not in ['creator', 'administrator', 'member']:
+                not_subscribed.append(ch)
+        except Exception:
+            not_subscribed.append(ch)
+
+    if not_subscribed:
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        for ch in not_subscribed:
+            markup.add(types.InlineKeyboardButton(f"✅ {ch['title']}", url=f"https://t.me/{ch['link'].replace('@','')}"))
+        markup.add(types.InlineKeyboardButton("♻️ Tekshirish", callback_data="check_subs"))
+
+        bot.edit_message_text(
+            "❗ Hali ham ba'zi kanallarga obuna bo‘lmadingiz:",
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=markup
+        )
+    else:
+        # Deep link bor yoki yo‘qligini tekshiramiz
+        state = user_states.get(user_id)
+        if state and 'deep_link' in state:
+            show_deep_link_data(call.message.chat.id, state['deep_link'])
+            user_states.pop(user_id, None)
+        else:
+            send_main_menu(call.message.chat.id)
+
+# ✅ Deep link orqali kelgan elonni egasini chiqaruvchi funksiya
+def show_deep_link_data(chat_id, deep_link_id):
+    import json, os
+    if os.path.exists('database.json'):
+        with open('database.json', 'r', encoding='utf-8') as f:
+            try:
+                db = json.load(f)
+            except json.JSONDecodeError:
+                db = {}
+    else:
+        db = {}
+
+    data = db.get(deep_link_id)
+    if data and data.get('elon') == True:
+        owner_id = str(data.get('owner'))
+        if os.path.exists('users.json'):
+            with open('users.json', 'r', encoding='utf-8') as f:
+                try:
+                    users = json.load(f)
+                except json.JSONDecodeError:
+                    users = {}
+        else:
+            users = {}
+
+        owner = users.get(owner_id)
+        if owner:
+            name = owner.get('name') or "Noma'lum"
+            num = owner.get('num') or "Noma'lum"
+            text = (
+                f"👤 <b>Siz izlagan e'lonning egasi:</b>\n"
+                f"📛 <b>Ism:</b> {name}\n"
+                f"📞 <b>Telefon:</b> {num}"
+            )
+            bot.send_message(chat_id, text, parse_mode='HTML')
+            return
+        else:
+            bot.send_message(chat_id, "❗ Foydalanuvchi topilmadi.")
+            return
+    else:
+        bot.send_message(chat_id, "❗ E'lon topilmadi yoki sotuvdan olingan.")
 
 
 
@@ -412,6 +561,255 @@ def handle_download(message):
 
 
 
+
+
+
+
+
+
+
+
+
+@bot.message_handler(commands=['mine'])
+def my_ads(message):
+    user_id = str(message.from_user.id)
+
+    # database.json ochamiz
+    if not os.path.exists('database.json'):
+        db = {}
+    else:
+        with open('database.json', 'r', encoding='utf-8') as f:
+            try:
+                db = json.load(f)
+            except json.JSONDecodeError:
+                db = {}
+
+    # Shu userga tegishli elonlar
+    my_ads_list = [ad_id for ad_id, ad in db.items() if str(ad.get('owner')) == user_id]
+
+    if not my_ads_list:
+        bot.send_message(message.chat.id, "❗ Sizda hozircha e'lon yo‘q.")
+        return
+
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    buttons = [
+        types.InlineKeyboardButton(
+            text=ad_id,
+            callback_data=f"show_{ad_id}_{user_id}"
+        ) for ad_id in my_ads_list
+    ]
+    markup.add(*buttons)
+
+    markup.add(types.InlineKeyboardButton("🗑 Elonni o‘chirish", callback_data="delete_ad"))
+
+    bot.send_message(message.chat.id, "📋 Sizning e'lonlaringiz:", reply_markup=markup)
+
+
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('show_'))
+def show_my_ad(call):
+    parts = call.data.split('_')
+    ad_id = parts[1]
+    owner_id = parts[2]
+    user_id = str(call.from_user.id)
+
+    # Agar o'z e'loni bo'lmasa
+    if user_id != owner_id:
+        bot.answer_callback_query(call.id, "❗ Bu sizning e'loningiz emas!", show_alert=True)
+        return
+
+    # database.json dan e'lonni topamiz
+    if not os.path.exists('database.json'):
+        db = {}
+    else:
+        with open('database.json', 'r', encoding='utf-8') as f:
+            try:
+                db = json.load(f)
+            except json.JSONDecodeError:
+                db = {}
+
+    ad = db.get(ad_id)
+    if not ad:
+        bot.answer_callback_query(call.id, "❗ E'lon topilmadi.", show_alert=True)
+        return
+
+    # Rasmlar
+    media = []
+    for idx, photo_path in enumerate(ad.get('images', [])):
+        if idx == 0:
+            media.append(types.InputMediaPhoto(open(photo_path, 'rb')))
+        else:
+            media.append(types.InputMediaPhoto(open(photo_path, 'rb')))
+
+    # Caption matni fayldan o‘qib olamiz
+    caption_text = ""
+    if os.path.exists(ad.get('caption', '')):
+        with open(ad['caption'], 'r', encoding='utf-8') as f:
+            caption_text = f.read()
+
+    # Holat matni
+    status = ad.get('elon')
+    if status:
+        status_text = "\n\n✅ <b>Elon faol</b>"
+    else:
+        status_text = "\n\n❌ <b>Elon faol emas</b>"
+
+    if media:
+        # Birinchi rasm caption bilan
+        media[0].caption = caption_text + status_text
+        media[0].parse_mode = 'HTML'
+
+        bot.send_media_group(call.message.chat.id, media)
+
+    # Pastki inline tugmalar
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("⬅️ Orqaga", callback_data="back_to_mine"))
+
+    bot.send_message(
+        call.message.chat.id,
+        "⬆️ Sizning e'loningiz tafsilotlari yuqorida.",
+        reply_markup=markup
+    )
+
+
+
+@bot.callback_query_handler(func=lambda call: call.data == 'delete_ad')
+def choose_ad_to_delete(call):
+    user_id = str(call.from_user.id)
+
+    # database.json ni o‘qiymiz
+    if not os.path.exists('database.json'):
+        db = {}
+    else:
+        with open('database.json', 'r', encoding='utf-8') as f:
+            try:
+                db = json.load(f)
+            except json.JSONDecodeError:
+                db = {}
+
+    # Faqat shu userning faol (elon==True) elonlari
+    my_active_ads = [
+        ad_id for ad_id, ad in db.items()
+        if str(ad.get('owner')) == user_id and ad.get('elon') == True
+    ]
+
+    if not my_active_ads:
+        bot.answer_callback_query(call.id, "❗ Sizda faol e'lon yo‘q.", show_alert=True)
+        return
+
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    # E'lon tugmalari
+    buttons = [
+        types.InlineKeyboardButton(
+            text=ad_id,
+            callback_data=f"confirmdel_{ad_id}_{user_id}"
+        ) for ad_id in my_active_ads
+    ]
+    markup.add(*buttons)
+
+    # Orqaga tugmasi
+    markup.add(types.InlineKeyboardButton("⬅️ Orqaga", callback_data="back_to_mine"))
+
+    bot.edit_message_text(
+        "🗑 O‘chirmoqchi bo‘lgan faol e'loningizni tanlang:",
+        call.message.chat.id,
+        call.message.message_id,
+        reply_markup=markup
+    )
+
+
+@bot.callback_query_handler(func=lambda call: call.data == 'back_to_mine')
+def back_to_mine_menu(call):
+    user_id = str(call.from_user.id)
+
+    if not os.path.exists('database.json'):
+        db = {}
+    else:
+        with open('database.json', 'r', encoding='utf-8') as f:
+            try:
+                db = json.load(f)
+            except json.JSONDecodeError:
+                db = {}
+
+    my_ads_list = [ad_id for ad_id, ad in db.items() if str(ad.get('owner')) == user_id]
+
+    if not my_ads_list:
+        bot.edit_message_text("❗ Sizda e'lon yo‘q.", call.message.chat.id, call.message.message_id)
+        return
+
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    buttons = [
+        types.InlineKeyboardButton(
+            text=ad_id,
+            callback_data=f"show_{ad_id}_{user_id}"
+        ) for ad_id in my_ads_list
+    ]
+    markup.add(*buttons)
+    markup.add(types.InlineKeyboardButton("🗑 Elonni o‘chirish", callback_data="delete_ad"))
+
+    bot.edit_message_text(
+        "📋 Sizning e'lonlaringiz:",
+        call.message.chat.id,
+        call.message.message_id,
+        reply_markup=markup
+    )
+
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('confirmdel_'))
+def confirm_delete_ad(call):
+    parts = call.data.split('_')  # ['confirmdel', ad_id, owner_id]
+    if len(parts) != 3:
+        bot.answer_callback_query(call.id, "❗ Xatolik!", show_alert=True)
+        return
+
+    ad_id = parts[1]
+    owner_id = parts[2]
+    user_id = str(call.from_user.id)
+
+    if user_id != owner_id:
+        bot.answer_callback_query(call.id, "❗ Bu sizning e'loningiz emas!", show_alert=True)
+        return
+
+    with open('database.json', 'r', encoding='utf-8') as f:
+        db = json.load(f)
+
+    ad = db.get(ad_id)
+    if not ad:
+        bot.answer_callback_query(call.id, "❗ E'lon topilmadi.", show_alert=True)
+        return
+
+    ad['elon'] = False
+    db[ad_id] = ad
+
+    with open('database.json', 'w', encoding='utf-8') as f:
+        json.dump(db, f, ensure_ascii=False, indent=4)
+
+    bot.edit_message_text("✅ E'lon muvaffaqiyatli o‘chirildi!", call.message.chat.id, call.message.message_id)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @bot.callback_query_handler(func=lambda call: call.data == 'menu_uy')
 def handle_menu_uy(call):
     bot.answer_callback_query(call.id)
@@ -519,7 +917,7 @@ def handle_dost(call):
     markup.add(
         InlineKeyboardButton(
             text="📲 Do‘stga ulashish",
-            switch_inline_query="Salom! Mana zo‘r bot, kirib ko‘r 👉 https://t.me/YOUR_BOT_USERNAME"
+            switch_inline_query="Salom! Mana zo‘r bot, kirib ko‘ring 👉 https://t.me/Maklersiz_uyjoybot"
         )
     )
 
@@ -691,7 +1089,7 @@ Shu namuna asosida e’loningizni yozing!
 👥 Kimga: Shariy nikohga / oilaga / studentlarga
 
 🔴 Eslatma
-Rasm tashlash jarayonida alohida-alohida rasm kiriting, 8ta rasmgacha mumkin."""
+Rasm tashlash jarayonida alohida-alohida rasm kiriting, 8ta rasmgacha mumkin.\nTelefon raqamingizni yozib qoldirmang """
     )
     bot.register_next_step_handler_by_chat_id(call.message.chat.id, receive_caption)
 
@@ -783,19 +1181,21 @@ def send_album(message):
 
 
 def save_user_phone(message):
+    import json
+    import os
+    import random
+    from datetime import datetime
+
     user_id = str(message.from_user.id)
     phone = message.text.strip()
 
-    # Telefon raqamini tekshirish
+    # Telefon raqamini tekshiramiz
     if not (phone.startswith('+998') and len(phone) == 13 and phone[1:].isdigit()):
         bot.send_message(message.chat.id, "❗ Noto‘g‘ri format! Telefon raqamingizni +998 bilan, to‘g‘ri yozing. Masalan: +998901234567")
         bot.register_next_step_handler_by_chat_id(message.chat.id, save_user_phone)
         return
 
-    # users.json ga yozamiz yoki yangilaymiz
-    import json
-    import os
-
+    # users.json yangilash
     if not os.path.exists('users.json'):
         users = {}
     else:
@@ -814,17 +1214,77 @@ def save_user_phone(message):
     with open('users.json', 'w', encoding='utf-8') as f:
         json.dump(users, f, ensure_ascii=False, indent=4)
 
-    # Endi rasmlar va caption bilan e'lonni guruhga jo‘natamiz
+    # Rasmlar va caption olish
     state = user_states.get(int(user_id))
     if not state or not state['photos']:
         bot.send_message(message.chat.id, "❗ Rasmlar topilmadi.")
         return
 
-    caption_text = state['caption']
+    # database.json ochamiz yoki yaratamiz
+    if not os.path.exists('database.json'):
+        db = {}
+    else:
+        with open('database.json', 'r', encoding='utf-8') as f:
+            try:
+                db = json.load(f)
+            except json.JSONDecodeError:
+                db = {}
+
+    # Unikal random 6 xonali id
+    while True:
+        random_id = str(random.randint(100000, 999999))
+        if random_id not in db:
+            break
+
+    # Sana (masalan, 2025-07-09)
+    date_str = datetime.now().strftime('%Y-%m-%d')
+
+    # Saqlash uchun papka
+    save_folder = f'data/{random_id}'
+    os.makedirs(save_folder, exist_ok=True)
+
+    # Rasmlarni saqlash
+    saved_images = []
+    for idx, old_path in enumerate(state['photos'], 1):
+        new_name = f"{date_str}_{idx}rasm.jpg"
+        new_path = os.path.join(save_folder, new_name)
+        shutil.copyfile(old_path, new_path)
+        saved_images.append(new_path)
+
+    # Caption faylini saqlash
+    caption_filename = f"{date_str}_caption.txt"
+    caption_path = os.path.join(save_folder, caption_filename)
+    with open(caption_path, 'w', encoding='utf-8') as f:
+        f.write(state['caption'])
+
+    # database.json ga yozamiz
+    db[random_id] = {
+        'owner': user_id,
+        'images': saved_images,
+        'caption': caption_path,
+        'elon': True,
+        'deep_link': random_id
+    }
+
+    with open('database.json', 'w', encoding='utf-8') as f:
+        json.dump(db, f, ensure_ascii=False, indent=4)
+
+    # Deep link hosil qilamiz
+    bot_username = "TestPix_robot"  # o'z bot username'ingni shu yerga yoz!
+    deep_link = f"https://t.me/{bot_username}?start={random_id}"
+
+    # E'longa qo'yiladigan caption
+    caption_text = (
+        f"{state['caption']}\n\n"
+        f"🔗 [LINK]({deep_link})\n"
+        f"Agar shu elonga qiziqayotgan bo‘lsangiz, admin bilan bog‘lanib unga linkni bering yoki shu e’lonni ko‘rsating."
+    )
+
+    # Rasmlarni guruhga yuboramiz
     media = []
-    for idx, photo_path in enumerate(state['photos']):
+    for idx, photo_path in enumerate(saved_images):
         if idx == 0:
-            media.append(types.InputMediaPhoto(open(photo_path, 'rb'), caption=caption_text))
+            media.append(types.InputMediaPhoto(open(photo_path, 'rb'), caption=caption_text, parse_mode='Markdown'))
         else:
             media.append(types.InputMediaPhoto(open(photo_path, 'rb')))
 
@@ -838,8 +1298,7 @@ def save_user_phone(message):
         if hasattr(m.media, 'close'):
             m.media.close()
 
-    # Papkani o‘chir
-    shutil.rmtree(f'downloads/user_{user_id}', ignore_errors=True)
+    # user_states tozalash
     user_states.pop(int(user_id), None)
 
     bot.send_message(message.chat.id, "✅ E'lon jo'natildi!")
