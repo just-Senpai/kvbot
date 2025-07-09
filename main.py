@@ -2,7 +2,7 @@ import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import os
 
-TOKEN = '8017774805:AAGbL_svd8A7EqPDeWF_aQhZSlDZ0vYu'
+TOKEN = '8017774805:AAGbL_svd8A7EqPDeWF_aQhZSlDZ0vYu1dw'
 bot = telebot.TeleBot(TOKEN)
 
 
@@ -13,7 +13,7 @@ def send_main_menu(chat_id):
         InlineKeyboardButton("🏠 Uy-joy izlash", callback_data='menu_uy'),
         InlineKeyboardButton("👫 Do‘stlarni taklif qilish", callback_data='menu_dost'),
         InlineKeyboardButton("📞 Reklama uchun admin", url='https://t.me/Abu200115'),
-        InlineKeyboardButton("🎥 Video qo‘llanma", url='https://t.me/+LZNXTqqbPSg3Yzdi')
+        InlineKeyboardButton("🎥 Video qo‘llanma", url='https://t.me/vedio_qullanma')
     )
     bot.send_message(
         chat_id,
