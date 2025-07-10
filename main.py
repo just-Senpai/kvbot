@@ -13,7 +13,7 @@ def send_main_menu(chat_id):
         InlineKeyboardButton("🏠 Uy-joy izlash", callback_data='menu_uy'),
         InlineKeyboardButton("👫 Do‘stlarni taklif qilish", callback_data='menu_dost'),
         InlineKeyboardButton("📞 Reklama uchun admin", url='https://t.me/Abu200115'),
-        InlineKeyboardButton("🎥 Video qo‘llanma", url='https://t.me/vedio_qullanma')
+        InlineKeyboardButton("🎥 Video qo‘llanma", url='https://t.me/+LZNXTqqbPSg3Yzdi')
     )
     bot.send_message(
         chat_id,
@@ -724,34 +724,55 @@ def back_to_mine_menu(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('confirmdel_'))
 def confirm_delete_ad(call):
-    parts = call.data.split('_')  # ['confirmdel', ad_id, owner_id]
+    import json, os, shutil
+    user_id = str(call.from_user.id)
+
+    parts = call.data.split('_')
     if len(parts) != 3:
-        bot.answer_callback_query(call.id, "❗ Xatolik!", show_alert=True)
+        bot.answer_callback_query(call.id, "❗ Xatolik yuz berdi.", show_alert=True)
         return
 
     ad_id = parts[1]
     owner_id = parts[2]
-    user_id = str(call.from_user.id)
 
+    # Faqat egasi o‘chirishi mumkin
     if user_id != owner_id:
-        bot.answer_callback_query(call.id, "❗ Bu sizning e'loningiz emas!", show_alert=True)
+        bot.answer_callback_query(call.id, "❗ Bu e'lon sizniki emas.", show_alert=True)
         return
 
-    with open('database.json', 'r', encoding='utf-8') as f:
-        db = json.load(f)
+    # database.json ni o‘qiymiz
+    if not os.path.exists('database.json'):
+        db = {}
+    else:
+        with open('database.json', 'r', encoding='utf-8') as f:
+            try:
+                db = json.load(f)
+            except json.JSONDecodeError:
+                db = {}
 
     ad = db.get(ad_id)
-    if not ad:
-        bot.answer_callback_query(call.id, "❗ E'lon topilmadi.", show_alert=True)
+    if not ad or str(ad.get('owner')) != user_id:
+        bot.answer_callback_query(call.id, "❗ E'lon topilmadi yoki sizga tegishli emas.", show_alert=True)
         return
 
-    ad['elon'] = False
-    db[ad_id] = ad
+    # 📦 Papkani o‘chirish (masalan: data/{ad_id})
+    folder = f'data/{ad_id}'
+    if os.path.exists(folder):
+        shutil.rmtree(folder, ignore_errors=True)
 
+    # 🗑 JSON dan o‘chirish
+    db.pop(ad_id, None)
+
+    # Saqlash
     with open('database.json', 'w', encoding='utf-8') as f:
         json.dump(db, f, ensure_ascii=False, indent=4)
 
-    bot.edit_message_text("✅ E'lon muvaffaqiyatli o‘chirildi!", call.message.chat.id, call.message.message_id)
+    # Xabarni o‘zgartirish
+    bot.edit_message_text(
+        f"✅ E'lon muvaffaqiyatli o‘chirildi!",
+        call.message.chat.id,
+        call.message.message_id
+    )
 
 
 
@@ -882,7 +903,7 @@ def handle_dost(call):
     markup.add(
         InlineKeyboardButton(
             text="📲 Do‘stga ulashish",
-            switch_inline_query="Salom! Mana zo‘r bot, kirib ko‘ring 👉 https://t.me/Maklersiz_uyjoybot"
+            switch_inline_query="Salom! Mana zo‘r bot, kirib ko‘ring 👉 https://t.me/YOUR_BOT_USERNAME"
         )
     )
 
