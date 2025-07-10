@@ -1235,7 +1235,7 @@ def save_user_phone(message):
         json.dump(db, f, ensure_ascii=False, indent=4)
 
     # Deep link hosil qilamiz
-    bot_username = "TestPix_robot"  # o'z bot username'ingni shu yerga yoz!
+    bot_username = "Maklersiz_uyjoybot"  # o'z bot username'ingni shu yerga yoz!
     deep_link = f"https://t.me/{bot_username}?start={random_id}"
 
     # E'longa qo'yiladigan caption
